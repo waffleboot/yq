@@ -7,8 +7,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func read(filename string) (map[interface{}]interface{}, error) {
-	file, errOpen := os.Open(filename)
+func (c config) read() (map[interface{}]interface{}, error) {
+	file, errOpen := os.Open(c.filename)
 	if errOpen != nil {
 		return nil, errOpen
 	}
@@ -17,8 +17,8 @@ func read(filename string) (map[interface{}]interface{}, error) {
 	return ans, yaml.NewDecoder(file).Decode(ans)
 }
 
-func write(filename string, m interface{}) error {
-	file, errCreate := os.Create(filename)
+func (c config) write(m interface{}) error {
+	file, errCreate := os.Create(c.filename)
 	if errCreate != nil {
 		return errCreate
 	}
@@ -34,28 +34,39 @@ func get(m map[interface{}]interface{}, name string) map[interface{}]interface{}
 	return make(map[interface{}]interface{})
 }
 
-func update(obj map[interface{}]interface{}) {
-	obj["cpu"] = "250m"
-	obj["memory"] = "250M"
+func (c config) update(obj map[interface{}]interface{}) {
+	obj["cpu"] = c.cpu
+	obj["memory"] = c.mem
 }
 
-func run(filename string) error {
-	cfg, errRead := read(filename)
+func (c config) run() error {
+	cfg, errRead := c.read()
 	if errRead != nil {
 		return errRead
 	}
 	updater := func(name string) {
 		obj := get(cfg, name)
-		update(obj)
+		c.update(obj)
 		cfg[name] = obj
 	}
 	updater("systemReserved")
 	updater("kubeReserved")
-	return write(filename, cfg)
+	return c.write(cfg)
+}
+
+type config struct {
+	filename string
+	cpu      string
+	mem      string
 }
 
 func main() {
-	if errRun := run(os.Args[1]); errRun != nil {
+	c := config{
+		filename: os.Args[1],
+		cpu:      os.Args[2],
+		mem:      os.Args[3],
+	}
+	if errRun := c.run(); errRun != nil {
 		log.Fatal(errRun)
 	}
 }
