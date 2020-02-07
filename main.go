@@ -7,64 +7,59 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-func (c config) read() (map[interface{}]interface{}, error) {
-	file, errOpen := os.Open(c.filename)
+type kubeletConfig map[interface{}]interface{}
+
+func (c appConfig) readKubeletConfig() (kubeletConfig, error) {
+	file, errOpen := os.Open(c.kubeletConfig)
 	if errOpen != nil {
 		return nil, errOpen
 	}
 	defer file.Close()
-	ans := make(map[interface{}]interface{})
-	return ans, yaml.NewDecoder(file).Decode(ans)
+	k := make(kubeletConfig)
+	return k, yaml.NewDecoder(file).Decode(k)
 }
 
-func (c config) write(m interface{}) error {
-	file, errCreate := os.Create(c.filename)
+func (c appConfig) writeKubeletConfig(k kubeletConfig) error {
+	file, errCreate := os.Create(c.kubeletConfig)
 	if errCreate != nil {
 		return errCreate
 	}
 	defer file.Close()
-	return yaml.NewEncoder(file).Encode(m)
+	return yaml.NewEncoder(file).Encode(k)
 }
 
-func get(m map[interface{}]interface{}, name string) map[interface{}]interface{} {
-	raw, ok := m[name]
-	if ok {
-		return raw.(map[interface{}]interface{})
+func (config kubeletConfig) update(section, key, value string) {
+	raw, ok := config[section]
+	if !ok {
+		raw = make(kubeletConfig)
+		config[section] = raw
 	}
-	return make(map[interface{}]interface{})
+	raw.(kubeletConfig)[key] = value
 }
 
-func (c config) update(obj map[interface{}]interface{}) {
-	obj["cpu"] = c.cpu
-	obj["memory"] = c.mem
-}
-
-func (c config) run() error {
-	cfg, errRead := c.read()
+func (c appConfig) run() error {
+	cfg, errRead := c.readKubeletConfig()
 	if errRead != nil {
 		return errRead
 	}
-	updater := func(name string) {
-		obj := get(cfg, name)
-		c.update(obj)
-		cfg[name] = obj
-	}
-	updater("systemReserved")
-	updater("kubeReserved")
-	return c.write(cfg)
+	cfg.update("kubeReserved", "cpu", c.cpu)
+	cfg.update("systemReserved", "cpu", c.cpu)
+	cfg.update("kubeReserved", "memory", c.mem)
+	cfg.update("systemReserved", "memory", c.mem)
+	return c.writeKubeletConfig(cfg)
 }
 
-type config struct {
-	filename string
-	cpu      string
-	mem      string
+type appConfig struct {
+	kubeletConfig string
+	cpu           string
+	mem           string
 }
 
 func main() {
-	c := config{
-		filename: os.Args[1],
-		cpu:      os.Args[2],
-		mem:      os.Args[3],
+	c := appConfig{
+		kubeletConfig: os.Args[1],
+		cpu:           os.Args[2],
+		mem:           os.Args[3],
 	}
 	if errRun := c.run(); errRun != nil {
 		log.Fatal(errRun)
